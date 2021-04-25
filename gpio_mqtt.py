@@ -77,7 +77,8 @@ def getOutputIndex(topic, status):
                 outputIndex -= 24
             break
     if outputIndex:
-        print("pinIndex: " + str(pinIndex) + " :" + str(status))
+        pass
+        # print("pinIndex: " + str(pinIndex) + " :" + str(status))
     return outputIndex
 
 
@@ -183,6 +184,7 @@ def processBMP085(pressureAtStation, temp):
 
 
 def openSerialPort(serialPortDeviceName):
+    global exit
     try:
         ser = serial.Serial(port=serialPortDeviceName,
                             baudrate=settings.SERIAL_PORT_BAUDRATE,
@@ -199,10 +201,14 @@ def openSerialPort(serialPortDeviceName):
     # Handle other exceptions and print the error
     except Exception as arg:
         print("%s" % str(arg))
-        traceback.print_exc()
+        # traceback.print_exc()
 
         #Report failure to Home Logic system check
         serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_NOTHING, 'Serial port open failure on port %s, wrong port or USB cable missing' % (serialPortDeviceName))
+
+        # Suppress restart loops
+        time.sleep(900) # 15 min
+        exit = True
 
 
 def closeSerialPort(ser):
@@ -210,13 +216,9 @@ def closeSerialPort(ser):
 
 
 def serialPortThread(serialPortDeviceName, serialPort):
+    global exit
     global checkMsg
     global somethingWrong
-
-    #battery = 0
-    #signal = 0
-    #jeeLinkRSSI = False
-    oldTimeout = current_sec_time()
 
     # Wait a while, the OS is probably testing what kind of device is there
     # with sending 'ATEE' commands and others
@@ -231,7 +233,7 @@ def serialPortThread(serialPortDeviceName, serialPort):
     boardId = 0
     print("serialPortThread started")
 
-    while True:
+    while not exit:
         try:
             if serialPort.isOpen():
                 serInLine = serialPort.readline().decode()
@@ -269,16 +271,8 @@ def serialPortThread(serialPortDeviceName, serialPort):
                             print("Adapter OK! Init Board: %s" % boardName)
                 else:
                     if msg[0] == boardName:
-                        # Reset the JeeLink Rx timeout timer
-                        oldTimeout = current_sec_time()
+                        pass
                         #print("Adapter OK! %s is alive" % boardName)
-                # Check the Rx timeout
-                if (current_sec_time() - oldTimeout) > 300:
-                    # Reset the rx timeout timer
-                    oldTimeout = current_sec_time()
-
-                    #Report failure to Home Logic system check
-                    serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_RESTART, 'BoardId: %d: Serial port timeout (5 min no data received)!' % boardId)
 
                 # Only handle messages starting with 'OK' from JeeLink
                 # Input msg:  OK I 10 26 1 (OK I <pinIndex> <pinName> <value>)
@@ -290,9 +284,6 @@ def serialPortThread(serialPortDeviceName, serialPort):
                     else:
                         serialPort.write("0l".encode())  # Led off
                     toggleLed = not toggleLed
-
-                    # Reset the JeeLink Rx timeout timer
-                    oldTimeout = current_sec_time()
 
                     # print 'OK found!'
                     del msg[0]  # remove 'OK' from list
@@ -323,25 +314,32 @@ def serialPortThread(serialPortDeviceName, serialPort):
                     #     pulseOn    = int(msg[2]) # pulseOn  [10ms]
                     #     pulseOff   = int(msg[3]) # pulseOff [10ms]
 
-                serviceReport.systemWatchTimer = current_sec_time()
-
-            # Check if there is any message to send
+            # Reset Rx timers and check if there is any message to send
             if boardId == 1:
+                # Reset the Rx timeout timer
+                serviceReport.systemWatchTimerBoard1 = current_sec_time()
+
                 if not sendQueueBoard1.empty():
                     sendMsg = sendQueueBoard1.get_nowait()
                     # print(("SendMsg: %s" % sendMsg))
                     if sendMsg != "":
                         serialPort.write(sendMsg)
             elif boardId == 2:
+                # Reset the Rx timeout timer
+                serviceReport.systemWatchTimerBoard2 = current_sec_time()
+
                 if not sendQueueBoard2.empty():
                     sendMsg = sendQueueBoard2.get_nowait()
                     # print(("SendMsg: %s" % sendMsg))
                     if sendMsg != "":
                         serialPort.write(sendMsg)
             elif boardId == 3:
+                # Reset the Rx timeout timer
+                serviceReport.systemWatchTimerBoard3 = current_sec_time()
+
                 if not sendQueueBoard3.empty():
                     sendMsg = sendQueueBoard3.get_nowait()
-                    print(("SendMsg: %s" % sendMsg))
+                    # print(("SendMsg: %s" % sendMsg))
                     if sendMsg != "":
                         serialPort.write(sendMsg)
 
