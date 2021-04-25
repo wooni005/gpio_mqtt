@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import time
 import paho.mqtt.publish as mqtt_publish
 import json
 
@@ -9,17 +10,29 @@ import settings
 #System check
 ACTION_NOTHING   = 0
 ACTION_RESTART   = 1
+current_sec_time = lambda: int(round(time.time()))
 
 checkMsg = 'OK'
 checkFail = False
 checkAction = ACTION_NOTHING
 checkReport = {}
+systemWatchTimerBoard1 = current_sec_time()
+systemWatchTimerBoard2 = current_sec_time()
+systemWatchTimerBoard3 = current_sec_time()
 
 
 #Called by mqtt
 def on_message_check(client, userdata, msgJson):
-    #print("on_message_check: "+msgJson.topic+": "+str(msgJson.payload))
-    sendCheckReportToHomeLogic(checkFail, checkAction, checkMsg)
+
+    if (current_sec_time() - systemWatchTimerBoard1) > 300:
+        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard1, 5 min no reaction on watchdog 'v' message in serialPortThread1-thread loop")
+    elif (current_sec_time() - systemWatchTimerBoard2) > 300:
+        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard2, 5 min no reaction on watchdog 'v' message in serialPortThread2-thread loop")
+    elif (current_sec_time() - systemWatchTimerBoard3) > 300:
+        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard3, 5 min no reaction on watchdog 'v' message in serialPortThread3-thread loop")
+    else:
+        #print("on_message_check: " + msgJson.topic + ": " + str(msgJson.payload))
+        sendCheckReportToHomeLogic(checkFail, checkAction, checkMsg)
 
 
 #Send the report to the Home Logic system checker
