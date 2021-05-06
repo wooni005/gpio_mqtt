@@ -24,12 +24,12 @@ systemWatchTimerBoard3 = current_sec_time()
 #Called by mqtt
 def on_message_check(client, userdata, msgJson):
 
-    if (current_sec_time() - systemWatchTimerBoard1) > 300:
-        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard1, 5 min no reaction on watchdog 'v' message in serialPortThread1-thread loop")
-    elif (current_sec_time() - systemWatchTimerBoard2) > 300:
-        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard2, 5 min no reaction on watchdog 'v' message in serialPortThread2-thread loop")
-    elif (current_sec_time() - systemWatchTimerBoard3) > 300:
-        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard3, 5 min no reaction on watchdog 'v' message in serialPortThread3-thread loop")
+    if (current_sec_time() - systemWatchTimerBoard1) > 600:
+        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard1, 10 min no reaction on watchdog 'v' message in serialPortThread1-thread loop, restart service")
+    elif (current_sec_time() - systemWatchTimerBoard2) > 600:
+        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard2, 10 min no reaction on watchdog 'v' message in serialPortThread2-thread loop, restart service")
+    elif (current_sec_time() - systemWatchTimerBoard3) > 600:
+        sendCheckReportToHomeLogic(True, ACTION_RESTART, "Timeout systemWatchTimerBoard3, 10 min no reaction on watchdog 'v' message in serialPortThread3-thread loop, restart service")
     else:
         #print("on_message_check: " + msgJson.topic + ": " + str(msgJson.payload))
         sendCheckReportToHomeLogic(checkFail, checkAction, checkMsg)
