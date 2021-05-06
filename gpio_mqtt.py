@@ -204,10 +204,10 @@ def openSerialPort(serialPortDeviceName):
         # traceback.print_exc()
 
         #Report failure to Home Logic system check
-        serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_NOTHING, 'Serial port open failure on port %s, wrong port or USB cable missing' % (serialPortDeviceName))
+        serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_RESTART, 'Serial port open failure on port %s, wrong port or USB cable missing' % (serialPortDeviceName))
 
         # Suppress restart loops
-        time.sleep(900) # 15 min
+        time.sleep(700) # 15 min
         exit = True
 
 
