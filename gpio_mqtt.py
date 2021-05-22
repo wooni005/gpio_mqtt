@@ -9,6 +9,7 @@ import serial
 import _thread
 import traceback
 import json
+import glob
 from queue import Queue
 import paho.mqtt.publish as mqtt_publish
 import paho.mqtt.client as mqtt_client
@@ -30,9 +31,7 @@ sendQueueBoard1 = Queue(maxsize=0)
 sendQueueBoard2 = Queue(maxsize=0)
 sendQueueBoard3 = Queue(maxsize=0)
 current_sec_time = lambda: int(round(time.time()))
-serialPort1 = None
-serialPort2 = None
-serialPort3 = None
+openPorts = {}
 
 
 def signal_handler(_signal, frame):
@@ -108,7 +107,7 @@ def on_message_output(client, userdata, msg):
                 phase = int(deviceName[-1])
                 pulseOn = int(msgData['pulseOn'])
                 pulseOff = int(msgData['pulseOff'])
-                print("Boiler-SSR: phase %d on: %d off: %d" % (phase, pulseOn, pulseOff))
+                # print("Boiler-SSR: phase %d on: %d off: %d" % (phase, pulseOn, pulseOff))
                 setDimmingOutput(phase, pulseOn, pulseOff)
             else:
                 # Output pin
@@ -183,55 +182,77 @@ def processBMP085(pressureAtStation, temp):
     # print("Temperature: %.2f C" % temp)
 
 
-def openSerialPort(serialPortDeviceName):
+def openSerialPorts():
     global exit
-    try:
-        ser = serial.Serial(port=serialPortDeviceName,
-                            baudrate=settings.SERIAL_PORT_BAUDRATE,
-                            parity=serial.PARITY_NONE,
-                            stopbits=serial.STOPBITS_ONE,
-                            bytesize=serial.EIGHTBITS,
-                            timeout=1)  # 1=1sec 0=non-blocking None=Blocked
+    global openPorts
 
-        if ser.isOpen():
-            print(("Successfully connected to serial port %s" % (serialPortDeviceName)))
+    # Get a list of to be opened serial ports
+    ports = glob.glob(settings.SERIAL_PORT_DEVICE_BASE)
 
-        return ser
+    for port in ports:
+        try:
+            ser = serial.Serial(port=port,
+                                baudrate=settings.SERIAL_PORT_BAUDRATE,
+                                parity=serial.PARITY_NONE,
+                                stopbits=serial.STOPBITS_ONE,
+                                bytesize=serial.EIGHTBITS,
+                                timeout=1)  # 1=1sec 0=non-blocking None=Blocked
 
-    # Handle other exceptions and print the error
-    except Exception as arg:
-        print("%s" % str(arg))
-        # traceback.print_exc()
+            if ser.isOpen():
+                print(("Connected to serial port %s, now testing which board is connected:" % (port)))
+                found = False
+                timeoutTimer = current_sec_time()
+                while not found:
+                    ser.write("v".encode())
+                    serInLine = ser.readline().decode()
+                    if serInLine != "":
+                        serInLine = serInLine.rstrip("\r\n")
+                        # print('GPIO: board: %d: %s' % (boardId, serInLine))
+                        msg = serInLine.split(' ')
+                        # print(msg)
+                        if msg[0][0] == '[':
+                            boardName = msg[0]
+                            if boardName[0:11] == '[STM32-GPIO':
+                                openPorts[boardName] = ser
+                                print(" - GPIO board %s found on device %s" % (boardName, ser.name))
+                                found = True
+                    if exit or (current_sec_time() - timeoutTimer) > 5:
+                        break
+                if not found:
+                    print(' - Not the correct board found: %s' % boardName)
 
+        # Handle other exceptions and print the error
+        except Exception:
+            print("Unable to open port %s, trying next one" % port)
+
+    nrOfFoundPorts = len(openPorts)
+    if nrOfFoundPorts != settings.NR_OF_BOARDS:
         #Report failure to Home Logic system check
-        serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_RESTART, 'Serial port open failure on port %s, wrong port or USB cable missing' % (serialPortDeviceName))
+        serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_RESTART, 'Not enough GPIO ports found. Found %d, but need 3 serial ports' % nrOfFoundPorts)
 
-        # Suppress restart loops
-        time.sleep(700) # 15 min
+        # # Suppress restart loops from systemd if something is wrong
+        time.sleep(780) # 13 min
         exit = True
 
 
-def closeSerialPort(ser):
-    ser.close()
-
-
-def serialPortThread(serialPortDeviceName, serialPort):
+def serialPortThread(boardName, dummy):
     global exit
     global checkMsg
     global somethingWrong
+    global openPorts
 
     # Wait a while, the OS is probably testing what kind of device is there
     # with sending 'ATEE' commands and others
     time.sleep(2)
+    serialPort = openPorts[boardName]
     serialPort.reset_input_buffer()
 
     # Ask for board Id
     serialPort.write("v".encode())  # Get BoardName and nodeId
     boardNameOk = False
-    boardName = ""
     toggleLed = False
     boardId = 0
-    print("serialPortThread started")
+    print("serialPortThread started for %s" % boardName)
 
     while not exit:
         try:
@@ -356,7 +377,7 @@ def serialPortThread(serialPortDeviceName, serialPort):
 
         # Handle other exceptions and print the error
         except Exception as arg:
-            print("Exception in serialPortThread boardId=%d, serialPortDeviceName:%s" % (boardId, serialPortDeviceName))
+            print("Exception in serialPortThread boardName%s on serialPort:%s" % (boardName, openPorts[boardName].name))
             print("%s" % str(arg))
             traceback.print_exc()
             time.sleep(120)
@@ -382,9 +403,7 @@ logger.initLogger(settings.LOG_FILENAME)
 signal.signal(signal.SIGINT, signal_handler)
 
 # Make the following devices accessable for user
-os.system("sudo chmod 666 %s" % settings.SERIAL_PORT_DEVICE_1)
-if settings.SERIAL_PORT_DEVICE_2 != "":
-    os.system("sudo chmod 666 %s" % settings.SERIAL_PORT_DEVICE_2)
+os.system("sudo chmod 666 %s" % settings.SERIAL_PORT_DEVICE_BASE)
 
 # Give Home Assistant and Mosquitto the time to startup
 time.sleep(1)
@@ -409,42 +428,35 @@ client.on_message = on_message
 client.connect("192.168.5.248", 1883, 60)
 client.loop_start()
 
-# Create the serialPortThread for boardId 1
-try:
-    print("Opening serial port")
-    serialPort1 = openSerialPort(settings.SERIAL_PORT_DEVICE_1)
+# Search for the correct ports and open the ports
+openSerialPorts()
 
+# Create the serialPortThread for board 1
+try:
     # thread.start_new_thread( print_time, (60, ) )
-    _thread.start_new_thread(serialPortThread, (settings.SERIAL_PORT_DEVICE_1, serialPort1))
+    _thread.start_new_thread(serialPortThread, (settings.BOARD_1_NAME, 0))
 except Exception as e:
-    print("Error: unable to start the serialPortThread boardId 1")
+    print("Error: unable to start the serialPortThread for board %s" % settings.BOARD_1_NAME)
     print("Exception: %s" % str(e))
     traceback.print_exc()
 
+# Create the serialPortThread for board 2
+try:
+    # thread.start_new_thread( print_time, (60, ) )
+    _thread.start_new_thread(serialPortThread, (settings.BOARD_2_NAME, 0))
+except Exception as e:
+    print("Error: unable to start the serialPortThread for board %s" % settings.BOARD_2_NAME)
+    print("Exception: %s" % str(e))
+    traceback.print_exc()
 
-if settings.SERIAL_PORT_DEVICE_2 != "":
-    # Create the serialPortThread for boardId 2
-    try:
-        serialPort2 = openSerialPort(settings.SERIAL_PORT_DEVICE_2)
-
-        # thread.start_new_thread( print_time, (60, ) )
-        _thread.start_new_thread(serialPortThread, (settings.SERIAL_PORT_DEVICE_2, serialPort2))
-    except Exception as e:
-        print("Error: unable to start the serialPortThread boardId 2")
-        print("Exception: %s" % str(e))
-        traceback.print_exc()
-
-if settings.SERIAL_PORT_DEVICE_3 != "":
-    # Create the serialPortThread for boardId 3
-    try:
-        serialPort3 = openSerialPort(settings.SERIAL_PORT_DEVICE_3)
-
-        # thread.start_new_thread( print_time, (60, ) )
-        _thread.start_new_thread(serialPortThread, (settings.SERIAL_PORT_DEVICE_3, serialPort3))
-    except Exception as e:
-        print("Error: unable to start the serialPortThread boardId 3")
-        print("Exception: %s" % str(e))
-        traceback.print_exc()
+# Create the serialPortThread for board 3
+try:
+    # thread.start_new_thread( print_time, (60, ) )
+    _thread.start_new_thread(serialPortThread, (settings.BOARD_3_NAME, 0))
+except Exception as e:
+    print("Error: unable to start the serialPortThread for board %s" % settings.BOARD_3_NAME)
+    print("Exception: %s" % str(e))
+    traceback.print_exc()
 
 time.sleep(10)
 
@@ -471,14 +483,9 @@ while not exit:
 
     time.sleep(1)
 
-
-if (serialPort1 is not None):
-    closeSerialPort(serialPort1)
-
-if (serialPort2 is not None):
-    closeSerialPort(serialPort2)
-
-if (serialPort3 is not None):
-    closeSerialPort(serialPort3)
+for board in openPorts:
+    print("Closed port %s for board %s" % (openPorts[board].name, board))
+    if openPorts[board] is not None:
+        openPorts[board].close()
 
 print("Clean exit!")
