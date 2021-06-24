@@ -228,8 +228,7 @@ def openSerialPorts():
     nrOfFoundPorts = len(openPorts)
     if nrOfFoundPorts != settings.NR_OF_BOARDS:
         #Report failure to Home Logic system check
-        serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_RESTART, 'Not enough GPIO ports found. Found %d, but need 3 serial ports' % nrOfFoundPorts)
-
+        serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_RESTART, 'Not enough GPIO ports found. Found %d and need %d serial ports' % (nrOfFoundPorts, settings.NR_OF_BOARDS))
         # # Suppress restart loops from systemd if something is wrong
         time.sleep(780) # 13 min
         exit = True
@@ -377,7 +376,7 @@ def serialPortThread(boardName, dummy):
 
         # Handle other exceptions and print the error
         except Exception as arg:
-            print("Exception in serialPortThread boardName%s on serialPort:%s" % (boardName, openPorts[boardName].name))
+            print("Exception in serialPortThread boardName %s on serialPort: %s" % (boardName, openPorts[boardName].name))
             print("%s" % str(arg))
             traceback.print_exc()
             time.sleep(120)
