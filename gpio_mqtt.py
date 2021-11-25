@@ -218,6 +218,7 @@ def openSerialPorts():
                                 found = True
                     if exit or (current_sec_time() - timeoutTimer) > 5:
                         break
+                    time.sleep(1)
                 if not found:
                     print(' - Not the correct board found: %s' % boardName)
 
@@ -266,22 +267,21 @@ def serialPortThread(boardName, dummy):
                 serInLine = serInLine.rstrip("\r\n")
                 # print('GPIO: board: %d: %s' % (boardId, serInLine))
                 msg = serInLine.split(' ')
-                #print(msg)
+                # print(msg)
                 # Board is started: Init it
                 if not boardNameOk:
-                    # [ESP-GPIO.%d]
-                    boardName = msg[0]
+                    # [ESP-GPIO.%d]SERIAL_BAUD
                     if boardName[0:11] == '[STM32-GPIO':
                         if boardName[-2] == '1':
                             boardId = 1
                             boardNameOk = True
                             serialPort.write("0u".encode()) # Disable all pullups on inputs and set all inputs back to input
-                            serialPort.write("a".encode())  # Get all pin statusses
+                            # serialPort.write("a".encode())  # Get all pin statusses
                         elif boardName[-2] == '2':
                             boardId = 2
                             boardNameOk = True
                             serialPort.write("0u".encode()) # Disable all pullups on inputs and set all inputs back to input
-                            serialPort.write("a".encode())  # Get all pin statusses
+                            # serialPort.write("a".encode())  # Get all pin statusses
                         elif boardName[-2] == '3':
                             boardId = 3
                             boardNameOk = True
@@ -365,9 +365,10 @@ def serialPortThread(boardName, dummy):
 
         # In case the message contains unusual data
         except ValueError as arg:
+            print('ValueError Except received from board: %d: %s' % (boardId, serInLine))
             print(arg)
             traceback.print_exc()
-            time.sleep(1)
+            # time.sleep(1)
 
         # Quit the program by Ctrl-C
         except KeyboardInterrupt:
@@ -424,7 +425,7 @@ client.message_callback_add(settings.MQTT_TOPIC_COMMAND, on_message_command)
 client.message_callback_add(settings.MQTT_TOPIC_CHECK,   serviceReport.on_message_check)
 client.on_connect = on_connect
 client.on_message = on_message
-client.connect("192.168.5.248", 1883, 60)
+client.connect(settings.MQTT_ServerIP, settings.MQTT_ServerPort, 60)
 client.loop_start()
 
 # Search for the correct ports and open the ports
@@ -438,6 +439,7 @@ except Exception as e:
     print("Error: unable to start the serialPortThread for board %s" % settings.BOARD_1_NAME)
     print("Exception: %s" % str(e))
     traceback.print_exc()
+# time.sleep(5)
 
 # Create the serialPortThread for board 2
 try:
@@ -447,6 +449,7 @@ except Exception as e:
     print("Error: unable to start the serialPortThread for board %s" % settings.BOARD_2_NAME)
     print("Exception: %s" % str(e))
     traceback.print_exc()
+# time.sleep(15)
 
 # Create the serialPortThread for board 3
 try:
@@ -457,7 +460,7 @@ except Exception as e:
     print("Exception: %s" % str(e))
     traceback.print_exc()
 
-time.sleep(10)
+# time.sleep(10)
 
 readSensorTimer = 170  # Hold the pinsEnabled for 10 sec
 
@@ -471,10 +474,22 @@ while not exit:
         allPinsSendReady = False # Enable pinsEnabled directly when all pins are send
         if pinsEnabled is False:
             pinsEnabled = True
-            sendQueueBoard1.put("a".encode()) # Get board name and id 1 as watchdog for the serial adapter
-            sendQueueBoard2.put("a".encode()) # Get board name and id 2 as watchdog for the serial adapter
+
+            print("Get all I/O values from board 1")
+            sendQueueBoard1.put("a".encode()) # Get all I/O values from board 1
+            time.sleep(3)
+
+            print("Get all I/O values from board 2")
+            sendQueueBoard2.put("a".encode()) # Get all I/O values from board 2
+            time.sleep(3)
+
+            # Switch off all SSR's when starting up (on board 3)
+            setDimmingOutput(1, 0, 0)
+            setDimmingOutput(2, 0, 0)
+            setDimmingOutput(3, 0, 0)
             print("Pins are enabled")
 
+        # time.sleep(10)
         sendQueueBoard1.put("v".encode()) # Get board name and id 1 as watchdog for the serial adapter
         sendQueueBoard2.put("v".encode()) # Get board name and id 2 as watchdog for the serial adapter
         sendQueueBoard2.put("p".encode()) # Get barometer and temperature from board 2

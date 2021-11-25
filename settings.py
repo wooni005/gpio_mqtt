@@ -14,7 +14,8 @@ BOARD_2_NAME = '[STM32-GPIO.2]'
 BOARD_3_NAME = '[STM32-GPIO.3]'
 NR_OF_BOARDS = 3
 
-SERIAL_PORT_BAUDRATE = 57600
+#SERIAL_PORT_BAUDRATE = 57600
+SERIAL_PORT_BAUDRATE = 9600
 LOG_FILENAME = "/home/pi/log/gpio_mqtt.log"
 #LOG_FILENAME = "gpio_mqtt.log"
 
@@ -22,5 +23,5 @@ DB_FILENAME = "/home/pi/db/doma.db"
 
 MQTT_TOPIC_OUT       = 'huis/GPIO/+/out'
 MQTT_TOPIC_COMMAND   = 'huis/GPIO/+/command'
-MQTT_TOPIC_CHECK     = "huis/GPIO/RPiHome/check"
-MQTT_TOPIC_REPORT    = "huis/GPIO/RPiHome/report"
+MQTT_TOPIC_CHECK     = "huis/GPIO/RPiIO/check"
+MQTT_TOPIC_REPORT    = "huis/GPIO/RPiIO/report"
