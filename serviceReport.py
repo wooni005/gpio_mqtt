@@ -10,12 +10,17 @@ import settings
 #System check
 ACTION_NOTHING   = 0
 ACTION_RESTART   = 1
-current_sec_time = lambda: int(round(time.time()))
 
 checkMsg = 'OK'
 checkFail = False
 checkAction = ACTION_NOTHING
 checkReport = {}
+
+
+def current_sec_time():
+    return int(round(time.time()))
+
+
 systemWatchTimerBoard1 = current_sec_time()
 systemWatchTimerBoard2 = current_sec_time()
 systemWatchTimerBoard3 = current_sec_time()

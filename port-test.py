@@ -7,16 +7,19 @@ import signal
 
 import settings
 
+exitProgram = False
+
 
 def signal_handler(_signal, frame):
-    global exit
+    global exitProgram
 
     print('You pressed Ctrl+C!')
-    exit = True
+    exitProgram = True
 
 
-current_sec_time = lambda: int(round(time.time()))
-exit = False
+def current_sec_time():
+    return int(round(time.time()))
+
 
 # All available serial ports
 ports = glob.glob('/dev/tty[A-Za-z]*')
@@ -56,7 +59,7 @@ for port in portsACM:
                             openPorts[boardName] = ser
                             print(" - GPIO board %s found on device %s" % (boardName, ser.name))
                             found = True
-                    if exit or (current_sec_time() - timeoutTimer) > 5:
+                    if exitProgram or (current_sec_time() - timeoutTimer) > 5:
                         break
             if not found:
                 print(' - Not the correct board found: %s' % boardName)
